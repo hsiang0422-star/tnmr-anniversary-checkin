@@ -45,7 +45,7 @@
       </nav>
     </header>
     <section class="frame-shell" aria-label="校慶來賓簽到系統">
-      <iframe id="app" title="校慶來賓簽到系統" src="https://script.google.com/macros/s/AKfycbwU8bWwPQkK9LD1ILkyCDvAhhWn6OQcW-Lm0uujpLkFQXWUD4G81y0GM6r4raI795Z1/exec?page=desk" allow="clipboard-read; clipboard-write"></iframe>
+      <iframe id="app" title="校慶來賓簽到系統" src="https://script.google.com/macros/s/AKfycbwU8bWwPQkK9LD1ILkyCDvAhhWn6OQcW-Lm0uujpLkFQXWUD4G81y0GM6r4raI795Z1/exec?authuser=0&page=desk" allow="clipboard-read; clipboard-write"></iframe>
     </section>
     <p class="hint">簽到管理需要密碼；名單查閱會自動更新。</p>
   </main>
@@ -54,7 +54,7 @@
     const tabs = Array.from(document.querySelectorAll(".tab"));
     tabs.forEach(tab => tab.addEventListener("click", () => {
       tabs.forEach(item => item.setAttribute("aria-selected", String(item === tab)));
-      frame.src = "https://script.google.com/macros/s/AKfycbwU8bWwPQkK9LD1ILkyCDvAhhWn6OQcW-Lm0uujpLkFQXWUD4G81y0GM6r4raI795Z1/exec?page=" + tab.dataset.page;
+      frame.src = "https://script.google.com/macros/s/AKfycbwU8bWwPQkK9LD1ILkyCDvAhhWn6OQcW-Lm0uujpLkFQXWUD4G81y0GM6r4raI795Z1/exec?authuser=0&page=" + tab.dataset.page;
     }));
   </script>
 </body>
