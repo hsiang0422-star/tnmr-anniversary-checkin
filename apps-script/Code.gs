@@ -210,6 +210,71 @@ function getXlsxFolders_() {
   };
 }
 
+// 資料庫檔：每次變動都覆寫為最新 CSV（Excel 可直接開啟）；舊檔丟到垃圾桶
+function syncExcel_(guests, archiveName) {
+  try {
+    const f = getXlsxFolders_();
+    const dbName = '校慶來賓簽到資料庫.csv';
+    const dbRows = [['ID', '姓名', '職稱', '簽到時間']].concat(guests.map(g => [
+      g.id, g.name, g.title, Utilities.formatDate(new Date(g.signedAt), CFG.TZ, 'yyyy/MM/dd HH:mm:ss')
+    ]));
+    replaceCsv_(f.main, dbName, dbRows);
+
+    // 新增來賓時，另存一份名單 CSV 存檔
+    if (archiveName) {
+      const stamp = Utilities.formatDate(new Date(), CFG.TZ, 'yyyyMMdd_HHmmss');
+      const listRows = [['序號', '姓名', '職稱', '簽到時間']].concat(guests.map((g, i) => [
+        i + 1, g.name, g.title, hhmm_(g.signedAt)
+      ]));
+      replaceCsv_(f.archive, guests.length + '_' + archiveName + '_' + stamp + '.csv', listRows, true);
+    }
+  } catch (err) {
+    // Excel 存檔失敗不影響簽到本身
+    Logger.log('Excel 存檔失敗：' + err);
+  }
+}
+
+// 寫成 CSV（加 UTF-8 BOM，Excel 才能正確顯示中文）
+function replaceCsv_(folder, name, rows, keepOld) {
+  const csv = '\uFEFF' + rows.map(r => r.map(csvCell_).join(',')).join('\r\n');
+  if (!keepOld) {
+    const olds = folder.getFilesByName(name);
+    while (olds.hasNext()) olds.next().setTrashed(true);
+  }
+  folder.createFile(name, csv, MimeType.CSV);
+}
+
+function csvCell_(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function withLock_(fn, archiveName) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const next = fn(readGuests_());
+    writeGuests_(next);
+    writeListSheet_(next);
+    SpreadsheetApp.flush();
+    syncExcel_(next, archiveName);
+    return next.map(toClient_);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ======================== Excel 資料庫與存檔 ======================== */
+
+// 雲端硬碟：「校慶來賓簽到_Excel」→ 資料庫檔案 ＋ 「來賓存檔」資料夾
+function getXlsxFolders_() {
+  // 資料夾由 TNMR2301 事先建立並分享，程式只讀寫既有資料夾，不再建立新資料夾
+  return {
+    main: DriveApp.getFolderById(CFG.XLSX_FOLDER_ID),
+    archive: DriveApp.getFolderById(CFG.ARCHIVE_FOLDER_ID),
+  };
+}
+
 // 資料庫檔：每次變動都覆寫為最新版本（舊檔丟到垃圾桶）
 // 外部帳號無法直接匯出學校試算表，因此用讀到的資料寫入暫存試算表，再匯出 Excel
 function syncExcel_(guests, archiveName) {
