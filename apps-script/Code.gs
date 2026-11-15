@@ -211,6 +211,74 @@ function getXlsxFolders_() {
 }
 
 // 資料庫檔：每次變動都覆寫為最新版本（舊檔丟到垃圾桶）
+// 外部帳號無法直接匯出學校試算表，因此用讀到的資料寫入暫存試算表，再匯出 Excel
+function syncExcel_(guests, archiveName) {
+  try {
+    const f = getXlsxFolders_();
+    const dbName = '校慶來賓簽到資料庫.xlsx';
+    const dbRows = [['ID', '姓名', '職稱', '簽到時間']].concat(guests.map(g => [
+      g.id, g.name, g.title, Utilities.formatDate(new Date(g.signedAt), CFG.TZ, 'yyyy/MM/dd HH:mm:ss')
+    ]));
+    const blob = makeXlsx_(dbName, dbRows);
+    const olds = f.main.getFilesByName(dbName);
+    while (olds.hasNext()) olds.next().setTrashed(true);
+    f.main.createFile(blob);
+
+    // 新增來賓時，另存一份名單 Excel 存檔
+    if (archiveName) {
+      const stamp = Utilities.formatDate(new Date(), CFG.TZ, 'yyyyMMdd_HHmmss');
+      const listRows = [['序號', '姓名', '職稱', '簽到時間']].concat(guests.map((g, i) => [
+        i + 1, g.name, g.title, hhmm_(g.signedAt)
+      ]));
+      const arch = makeXlsx_(guests.length + '_' + archiveName + '_' + stamp + '.xlsx', listRows);
+      f.archive.createFile(arch);
+    }
+  } catch (err) {
+    // Excel 存檔失敗不影響簽到本身
+    Logger.log('Excel 存檔失敗：' + err);
+  }
+}
+
+// 建立暫存試算表 → 寫入資料 → 匯出 Excel → 刪除暫存檔
+function makeXlsx_(fileName, rows) {
+  const ss = SpreadsheetApp.create(fileName);
+  try {
+    const sh = ss.getSheets()[0];
+    sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+    SpreadsheetApp.flush();
+    return DriveApp.getFileById(ss.getId()).getAs(MimeType.MICROSOFT_EXCEL).setName(fileName);
+  } finally {
+    DriveApp.getFileById(ss.getId()).setTrashed(true);
+  }
+}
+
+function withLock_(fn, archiveName) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const next = fn(readGuests_());
+    writeGuests_(next);
+    writeListSheet_(next);
+    SpreadsheetApp.flush();
+    syncExcel_(next, archiveName);
+    return next.map(toClient_);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ======================== Excel 資料庫與存檔 ======================== */
+
+// 雲端硬碟：「校慶來賓簽到_Excel」→ 資料庫檔案 ＋ 「來賓存檔」資料夾
+function getXlsxFolders_() {
+  // 資料夾由 TNMR2301 事先建立並分享，程式只讀寫既有資料夾，不再建立新資料夾
+  return {
+    main: DriveApp.getFolderById(CFG.XLSX_FOLDER_ID),
+    archive: DriveApp.getFolderById(CFG.ARCHIVE_FOLDER_ID),
+  };
+}
+
+// 資料庫檔：每次變動都覆寫為最新版本（舊檔丟到垃圾桶）
 function syncExcel_(guests, archiveName) {
   try {
     const f = getXlsxFolders_();
