@@ -24,6 +24,7 @@ const CFG = {
   LIST_SHEET: '來賓名單',
   LIST_FIRST_ROW: 4, // 來賓名單：第 1–3 列為標題與欄名，第 4 列起為名單
   MAX_FAILS: 20,     // 10 分鐘內密碼錯誤超過這個次數就暫停管理功能
+  XLSX_FOLDER: '校慶來賓簽到_Excel', // 雲端硬碟中存放 Excel 資料庫與存檔的資料夾
 };
 
 const DATA_HEADERS = ['ID', '姓名', '職稱', '簽到時間'];
@@ -85,7 +86,7 @@ function addGuest(pass, name, title) {
   return withLock_(guests => {
     guests.push({ id: Utilities.getUuid().slice(0, 8), name, title, signedAt: new Date() });
     return guests;
-  });
+  }, name);
 }
 
 // 更正姓名與職稱，保留原簽到時間與名單位置
@@ -175,7 +176,8 @@ function writeListSheet_(guests) {
   }
 }
 
-function withLock_(fn) {
+// archiveName：新增來賓時傳入姓名，會另外存一份 Excel 存檔
+function withLock_(fn, archiveName) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
@@ -183,9 +185,46 @@ function withLock_(fn) {
     writeGuests_(next);
     writeListSheet_(next);
     SpreadsheetApp.flush();
+    syncExcel_(next, archiveName);
     return next.map(toClient_);
   } finally {
     lock.releaseLock();
+  }
+}
+
+/* ======================== Excel 資料庫與存檔 ======================== */
+
+// 雲端硬碟：「校慶來賓簽到_Excel」→ 資料庫檔案 ＋ 「來賓存檔」資料夾
+function getXlsxFolders_() {
+  const root = DriveApp.getRootFolder();
+  const it = root.getFoldersByName(CFG.XLSX_FOLDER);
+  const main = it.hasNext() ? it.next() : root.createFolder(CFG.XLSX_FOLDER);
+  const it2 = main.getFoldersByName('來賓存檔');
+  const archive = it2.hasNext() ? it2.next() : main.createFolder('來賓存檔');
+  return { main, archive };
+}
+
+// 資料庫檔：每次變動都覆寫為最新版本（舊檔丟到垃圾桶）
+function syncExcel_(guests, archiveName) {
+  try {
+    const f = getXlsxFolders_();
+    const dbName = '校慶來賓簽到資料庫.xlsx';
+    const blob = DriveApp.getFileById(CFG.DATA_SS_ID).getAs(MimeType.MICROSOFT_EXCEL).setName(dbName);
+    const olds = f.main.getFilesByName(dbName);
+    while (olds.hasNext()) olds.next().setTrashed(true);
+    f.main.createFile(blob);
+
+    // 新增來賓時，另存一份名單 Excel 存檔
+    if (archiveName) {
+      const stamp = Utilities.formatDate(new Date(), CFG.TZ, 'yyyyMMdd_HHmmss');
+      const no = guests.length;
+      const arch = DriveApp.getFileById(CFG.LIST_SS_ID).getAs(MimeType.MICROSOFT_EXCEL)
+        .setName(no + '_' + archiveName + '_' + stamp + '.xlsx');
+      f.archive.createFile(arch);
+    }
+  } catch (err) {
+    // Excel 存檔失敗不影響簽到本身
+    Logger.log('Excel 存檔失敗：' + err);
   }
 }
 
