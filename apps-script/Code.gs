@@ -57,6 +57,7 @@ function setup() {
   }
   sh.getRange('D:D').setNumberFormat('yyyy/mm/dd hh:mm:ss');
   writeListSheet_(readGuests_());
+  syncExcel_(readGuests_());
 
   const p = PropertiesService.getScriptProperties();
   if (!p.getProperty('ADMIN_PASS')) {
