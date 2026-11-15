@@ -24,7 +24,7 @@ const CFG = {
   LIST_SHEET: '來賓名單',
   LIST_FIRST_ROW: 4, // 來賓名單：第 1–3 列為標題與欄名，第 4 列起為名單
   MAX_FAILS: 20,     // 10 分鐘內密碼錯誤超過這個次數就暫停管理功能
-  XLSX_FOLDER: '校慶來賓簽到_Excel', // 雲端硬碟中存放 Excel 資料庫與存檔的資料夾
+  XLSX_FOLDER_ID: '1mQWtPdVLxf888JlUd3dbuIMs-Av9s-ZY', // TNMR2301 雲端硬碟「校慶來賓簽到_Excel」資料夾 ID
 };
 
 const DATA_HEADERS = ['ID', '姓名', '職稱', '簽到時間'];
@@ -197,9 +197,7 @@ function withLock_(fn, archiveName) {
 
 // 雲端硬碟：「校慶來賓簽到_Excel」→ 資料庫檔案 ＋ 「來賓存檔」資料夾
 function getXlsxFolders_() {
-  const root = DriveApp.getRootFolder();
-  const it = root.getFoldersByName(CFG.XLSX_FOLDER);
-  const main = it.hasNext() ? it.next() : root.createFolder(CFG.XLSX_FOLDER);
+  const main = DriveApp.getFolderById(CFG.XLSX_FOLDER_ID);
   const it2 = main.getFoldersByName('來賓存檔');
   const archive = it2.hasNext() ? it2.next() : main.createFolder('來賓存檔');
   return { main, archive };
