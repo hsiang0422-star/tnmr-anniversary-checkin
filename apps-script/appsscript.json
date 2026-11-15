@@ -4,9 +4,11 @@
   "exceptionLogging": "STACKDRIVER",
   "webapp": {
     "executeAs": "USER_DEPLOYING",
-    "access": "ANYONE_ANONYMOUS"
+    "access": "DOMAIN"
   },
   "oauthScopes": [
-    "https://www.googleapis.com/auth/spreadsheets"
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/userinfo.email"
   ]
 }

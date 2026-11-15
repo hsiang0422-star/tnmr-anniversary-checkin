@@ -1,34 +1,44 @@
 /**
- * 臺南特教｜校慶來賓簽到 — 資料 API（Google Apps Script）
+ * 臺南特教｜校慶來賓簽到（Google Apps Script 網頁應用程式）
  *
- * 網頁放在 GitHub Pages，這支程式只負責讀寫兩份試算表：
+ * 網頁與資料都在這支程式裡，只允許學校網域帳號登入使用。
+ * 兩個入口（同一個網址）：
+ *   簽到處管理：<網址>
+ *   校長手機查閱：<網址>?page=view
+ *
+ * 資料存放：
  *   「臺南特教｜校慶來賓簽到（資料）」→ 分頁「來賓資料」：原始資料（列的順序＝名單順序）
  *   「臺南特教｜校慶來賓簽到名單」    → 分頁「來賓名單」：每次變動後自動重寫，給人看、列印用
  *
- * API：
- *   GET  ?action=list                             → { ok, guests:[{id,name,title,time}] }
- *   POST {action:'check', pass}                   → { ok }
- *   POST {action:'add',    pass, name, title}     → { ok, guests }
- *   POST {action:'edit',   pass, id, name, title} → { ok, guests }
- *   POST {action:'delete', pass, id}              → { ok, guests }
- *   POST {action:'move',   pass, id, dir}         → { ok, guests }   dir：-1 上移、1 下移
- *   失敗時 → { ok:false, error:'訊息' }
- *
- * 第一次使用：在編輯器選 setup 執行一次，到「執行紀錄」看管理密碼。
- * 管理密碼存在「指令碼屬性」，不會出現在 GitHub。
+ * 管理密碼存在「指令碼屬性」ADMIN_PASS，不寫在程式碼裡。
+ * 第一次使用：在編輯器選 setup 執行一次。
+ * 之後要改密碼：專案設定 → 指令碼屬性 → 編輯 ADMIN_PASS。
  */
 
 const CFG = {
   TZ: 'Asia/Taipei',
+  TITLE: '臺南特教｜校慶來賓簽到',
   DATA_SS_ID: '1GDYeThip-NZPYwDaDiGbpTjzP5kErhQMoYkJBJVN2ec', // 臺南特教｜校慶來賓簽到（資料）
   LIST_SS_ID: '1oT9g3zbINKStvBeoyfCLpx4Miqj07MGLpmVcoQoIO2Y', // 臺南特教｜校慶來賓簽到名單
   DATA_SHEET: '來賓資料',
   LIST_SHEET: '來賓名單',
-  LIST_FIRST_ROW: 4, // 來賓名單：第 1–2 列標題說明、第 3 列欄名、第 4 列起為名單
+  LIST_FIRST_ROW: 4, // 來賓名單：第 1–3 列為標題與欄名，第 4 列起為名單
   MAX_FAILS: 20,     // 10 分鐘內密碼錯誤超過這個次數就暫停管理功能
 };
 
 const DATA_HEADERS = ['ID', '姓名', '職稱', '簽到時間'];
+
+/* ======================== 網頁進入點 ======================== */
+
+function doGet(e) {
+  const page = e && e.parameter && e.parameter.page === 'view' ? 'view' : 'checkin';
+  const t = HtmlService.createTemplateFromFile('Index');
+  t.mode = page;
+  t.baseUrl = ScriptApp.getService().getUrl();
+  return t.evaluate()
+    .setTitle(page === 'view' ? CFG.TITLE + '（查閱）' : CFG.TITLE)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
 
 /* ======================== 初始化（執行一次） ======================== */
 
@@ -54,42 +64,21 @@ function setup() {
   Logger.log('完成。簽到處管理密碼：' + p.getProperty('ADMIN_PASS'));
 }
 
-// 想自訂密碼：把下面的 '' 改成新密碼，執行一次 setPasscode，再改回 ''
-function setPasscode() {
-  const NEW_PASS = '';
-  if (!NEW_PASS) throw new Error('請先在程式裡填入 NEW_PASS。');
-  PropertiesService.getScriptProperties().setProperty('ADMIN_PASS', NEW_PASS);
-  Logger.log('管理密碼已更新。');
+/* ======================== 給網頁呼叫的函式（google.script.run） ======================== */
+
+// 名單：學校網域內的使用者都能看
+function getList() {
+  return readGuests_().map(toClient_);
 }
 
-/* ======================== API 進入點 ======================== */
-
-function doGet(e) {
-  const action = e && e.parameter && e.parameter.action;
-  if (action === 'list') return json_({ ok: true, guests: readGuests_().map(toClient_) });
-  return json_({ ok: true, service: '臺南特教｜校慶來賓簽到 API' });
+// 登入時確認密碼
+function checkPass(pass) {
+  checkPass_(pass);
+  return true;
 }
 
-function doPost(e) {
-  try {
-    const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    checkPass_(req.pass);
-    switch (req.action) {
-      case 'check': return json_({ ok: true });
-      case 'add': return json_({ ok: true, guests: addGuest_(req.name, req.title) });
-      case 'edit': return json_({ ok: true, guests: editGuest_(req.id, req.name, req.title) });
-      case 'delete': return json_({ ok: true, guests: deleteGuest_(req.id) });
-      case 'move': return json_({ ok: true, guests: moveGuest_(req.id, req.dir) });
-      default: throw new Error('不明的操作。');
-    }
-  } catch (err) {
-    return json_({ ok: false, error: String(err && err.message || err) });
-  }
-}
-
-/* ======================== 操作 ======================== */
-
-function addGuest_(name, title) {
+function addGuest(pass, name, title) {
+  checkPass_(pass);
   name = clean_(name, 40);
   title = clean_(title, 60);
   if (!name) throw new Error('請輸入來賓姓名。');
@@ -100,7 +89,8 @@ function addGuest_(name, title) {
 }
 
 // 更正姓名與職稱，保留原簽到時間與名單位置
-function editGuest_(id, name, title) {
+function editGuest(pass, id, name, title) {
+  checkPass_(pass);
   name = clean_(name, 40);
   title = clean_(title, 60);
   if (!name) throw new Error('請輸入來賓姓名。');
@@ -113,7 +103,8 @@ function editGuest_(id, name, title) {
   });
 }
 
-function deleteGuest_(id) {
+function deleteGuest(pass, id) {
+  checkPass_(pass);
   return withLock_(guests => {
     const next = guests.filter(x => x.id !== id);
     if (next.length === guests.length) throw new Error('找不到這位來賓，可能已被刪除。');
@@ -121,11 +112,13 @@ function deleteGuest_(id) {
   });
 }
 
-function moveGuest_(id, dir) {
+// dir：-1 上移、1 下移
+function moveGuest(pass, id, dir) {
+  checkPass_(pass);
   return withLock_(guests => {
     const i = guests.findIndex(x => x.id === id);
-    const j = i + (Number(dir) < 0 ? -1 : 1);
     if (i < 0) throw new Error('找不到這位來賓，可能已被刪除。');
+    const j = i + (Number(dir) < 0 ? -1 : 1);
     if (j < 0 || j >= guests.length) return guests;
     [guests[i], guests[j]] = [guests[j], guests[i]];
     return guests;
@@ -207,9 +200,4 @@ function hhmm_(d) {
 
 function clean_(s, max) {
   return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, max);
-}
-
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
 }
