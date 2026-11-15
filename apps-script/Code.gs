@@ -25,6 +25,7 @@ const CFG = {
   LIST_FIRST_ROW: 4, // 來賓名單：第 1–3 列為標題與欄名，第 4 列起為名單
   MAX_FAILS: 20,     // 10 分鐘內密碼錯誤超過這個次數就暫停管理功能
   XLSX_FOLDER_ID: '1mQWtPdVLxf888JlUd3dbuIMs-Av9s-ZY', // TNMR2301 雲端硬碟「校慶來賓簽到_Excel」資料夾 ID
+  ARCHIVE_FOLDER_ID: '12_m3gDVdNyeaYQQgU5ZZIldJov7ogMmc', // 「校慶來賓簽到_Excel / 來賓存檔」資料夾 ID
 };
 
 const DATA_HEADERS = ['ID', '姓名', '職稱', '簽到時間'];
@@ -202,10 +203,11 @@ function withLock_(fn, archiveName) {
 
 // 雲端硬碟：「校慶來賓簽到_Excel」→ 資料庫檔案 ＋ 「來賓存檔」資料夾
 function getXlsxFolders_() {
-  const main = DriveApp.getFolderById(CFG.XLSX_FOLDER_ID);
-  const it2 = main.getFoldersByName('來賓存檔');
-  const archive = it2.hasNext() ? it2.next() : main.createFolder('來賓存檔');
-  return { main, archive };
+  // 資料夾由 TNMR2301 事先建立並分享，程式只讀寫既有資料夾，不再建立新資料夾
+  return {
+    main: DriveApp.getFolderById(CFG.XLSX_FOLDER_ID),
+    archive: DriveApp.getFolderById(CFG.ARCHIVE_FOLDER_ID),
+  };
 }
 
 // 資料庫檔：每次變動都覆寫為最新版本（舊檔丟到垃圾桶）
