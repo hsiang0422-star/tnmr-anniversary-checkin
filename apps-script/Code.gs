@@ -66,6 +66,11 @@ function setup() {
   Logger.log('完成。簽到處管理密碼：' + p.getProperty('ADMIN_PASS'));
 }
 
+// 檢查雲端硬碟權限（授權用）：在編輯器執行一次，確認能讀取 Excel 資料夾
+function checkDrive() {
+  Logger.log('可存取資料夾：' + DriveApp.getFolderById(CFG.XLSX_FOLDER_ID).getName());
+}
+
 /* ======================== 給網頁呼叫的函式（google.script.run） ======================== */
 
 // 名單：學校網域內的使用者都能看
